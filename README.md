@@ -29,6 +29,16 @@ This project solves this by adapting a modern **Vision-Language Model (VLM)** to
 
 ---
 
+## 🏗️ Architecture & Fine-Tuning Pipeline
+
+The Vision-Language Model is adapted using parameter-efficient fine-tuning (PEFT/LoRA). Both the Vision Encoder and the LLM Backbone are frozen to conserve compute and prevent catastrophic forgetting, while low-rank adapters are injected across attention and MLP projection layers.
+
+<p align="center">
+  <img width="1367" height="665" alt="Ekran görüntüsü 2026-09-01 220928" src="https://github.com/user-attachments/assets/dc65a5c6-78a8-4bd2-9ca6-c53215a1f3c5" />
+
+</p>
+
+*Only LoRA / adapter parameters are updated during fine-tuning.*
 ## ⚙️ LoRA & Training Configuration
 
 The model was fine-tuned for 1 epoch (48 global steps) using `bfloat16` precision and a cosine learning rate schedule with warmup.
@@ -81,6 +91,207 @@ Evaluating structured text generation requires multi-level assessment. Exact str
 | **Overall Item $F_1$** | **0.565** | **0.430** |
 
 ---
+## 🖼️ Qualitative Extraction Examples
+
+Evaluation results show that exact string matching is overly punitive for Vision-Language Models[cite: 1]. While low $F_1$ scores might suggest model failure, inspecting ground truth versus predicted outputs reveals strong semantic alignment and valid visual parsing[cite: 1].
+
+---
+
+### Example 1: High Semantic & Beverage Matching (`218092.jpg` — $F_1$: 0.80)[cite: 1]
+
+<p align="center">
+  <img width="308" height="448" alt="image" src="https://github.com/user-attachments/assets/dcd65868-c7e4-4593-a0be-979ebdac36a4" />
+
+ />
+</p>
+
+#### Ground Truth[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "French toast",
+  "food_items": [
+    "French toast",
+    "strawberries",
+    "powdered sugar",
+    "butter"
+  ],
+  "drink_items": [
+    "orange juice"
+  ]
+}
+```
+
+#### Model Prediction[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "fruit toast",
+  "food_items": [
+    "toast",
+    "strawberries",
+    "butter"
+  ],
+  "drink_items": [
+    "orange juice"
+  ]
+}
+```
+
+> **Analysis:** The model captures the primary dish, key toppings (strawberries, butter), and correctly isolates the beverage (orange juice)[cite: 1].
+
+---
+
+### Example 2: Ingredient Identification (`3716522.jpg` — $F_1$: 0.75)[cite: 1]
+
+<p align="center">
+  <img width="484" height="391" alt="image" src="https://github.com/user-attachments/assets/a77e6ae4-98be-4df9-90d6-54173506494d" />
+</p>
+
+#### Ground Truth[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "caprese salad",
+  "food_items": [
+    "tomatoes",
+    "mozzarella cheese",
+    "basil",
+    "balsamic glaze"
+  ],
+  "drink_items": []
+}
+```
+
+#### Model Prediction[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "tomato salad",
+  "food_items": [
+    "tomatoes",
+    "mozzarella",
+    "basil"
+  ],
+  "drink_items": []
+}
+```
+
+> **Analysis:** Rather than using the culinary name (*caprese salad*), the model describes the visual contents (*tomato salad*) while identifying core components (*tomatoes*, *mozzarella*, *basil*)[cite: 1].
+
+---
+
+### Example 3: Sub-component Matching (`2544128.jpg` — $F_1$: 0.71)[cite: 1]
+
+<p align="center">
+  <img width="404" height="448" alt="image" src="https://github.com/user-attachments/assets/11ec4d76-5f0f-47d7-be6d-ad4b63092a24" />
+
+</p>
+
+#### Ground Truth[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "lobster roll french fries",
+  "food_items": [
+    "lobster roll",
+    "french fries",
+    "mayonnaise",
+    "lemon"
+  ],
+  "drink_items": []
+}
+```
+
+#### Model Prediction[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "lobster roll",
+  "food_items": [
+    "lobster roll",
+    "french fries"
+  ],
+  "drink_items": []
+}
+```
+
+> **Analysis:** The model identifies the primary entree and side dish (*lobster roll*, *french fries*), omitting smaller garnish items (*lemon*, *mayonnaise*)[cite: 1].
+
+---
+
+### Example 4: Semantic Alignment vs. Low Token Overlap (`2001998.jpg` — $F_1$: 0.18)[cite: 1]
+
+
+#### Ground Truth[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "burrito",
+  "food_items": [
+    "burrito",
+    "tortilla",
+    "beans",
+    "salsa",
+    "cheese",
+    "rice"
+  ],
+  "drink_items": []
+}
+```
+
+#### Model Prediction[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "pastry",
+  "food_items": [
+    "pastry",
+    "filling"
+  ],
+  "drink_items": []
+}
+```
+
+> **Analysis:** A low score ($F_1 = 0.18$) reflects ground truth labeling of interior ingredients not directly visible (*beans, rice, salsa*)[cite: 1]. The model relies strictly on exterior visual appearance (*pastry/wrapped dough with filling*), highlighting the limitation of set-overlap metrics against partially occluded contents[cite: 1].
+
+---
+
+### Example 5: Generic vs. Fine-Grained Description (`2366722.jpg` — $F_1$: 0.20)[cite: 1]
+
+
+
+#### Ground Truth[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "seared scallops dish",
+  "food_items": [
+    "seared scallops",
+    "sauce",
+    "garnish",
+    "pea puree"
+  ],
+  "drink_items": []
+}
+```
+
+#### Model Prediction[cite: 1]
+```json
+{
+  "is_food": 1,
+  "image_title": "scallops",
+  "food_items": [
+    "scallops"
+  ],
+  "drink_items": []
+}
+```
+
+> **Analysis:** The model detects the main protein (*scallops*) correctly, but omits plated accents (*pea puree, garnish*), causing a low metric score despite valid core identification[cite: 1].
+## 🖼️ Qualitative Extraction Examples
+
+Comparison between **Ground Truth** annotations and **Fine-tuned Qwen2.5-VL** structured outputs:
 
 ## 🚀 Quick Start & Inference
 
