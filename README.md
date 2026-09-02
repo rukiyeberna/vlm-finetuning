@@ -1,9 +1,20 @@
 # 🍽️ Qwen2.5-VL Food Attribute & Ingredient Extraction (LoRA)
+[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-yellow)](https://huggingface.co/rukiyeberna/qwen2.5-vl-3b-food-extract-lora)
+[![Hugging Face Dataset](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-blue)](https://huggingface.co/datasets/rukiyeberna/foodextract-llava-vlm)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python: 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg)]()
+[![PEFT: LoRA](https://img.shields.io/badge/PEFT-LoRA-orange.svg)]()
 
 An end-to-end Vision-Language Model (VLM) fine-tuning and evaluation pipeline built on **Qwen2.5-VL-3B-Instruct** using **LoRA (Low-Rank Adaptation)** to extract structured JSON metadata (food verification, title, ingredients, and drinks) directly from raw food images.
 
 ---
+## 📊 Dataset & Preprocessing
 
+The model is fine-tuned on the conversational LLaVA-style formatted dataset:
+- **Original Source:** [`mrdbourke/FoodExtract-1k-Vision`](https://huggingface.co/datasets/mrdbourke/FoodExtract-1k-Vision)
+- **Processed LLaVA Dataset:** [`rukiyeberna/foodextract-llava-vlm`](https://huggingface.co/datasets/rukiyeberna/foodextract-llava-vlm)
+
+The processed dataset contains 757 training and 753 validation splits structured for instruction-following visual extraction.
 ## 📌 Project Motivation & Objectives
 
 Extracting unstructured information from images into structured formats is a fundamental problem in multimodal AI. Traditional object detection and classification models struggle with hierarchical attributes and fine-grained ingredient discovery. 
@@ -27,7 +38,49 @@ This project solves this by adapting a modern **Vision-Language Model (VLM)** to
 }
 ```
 
+
+
+## 🚀 Quickstart & Inference
+
+```python
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForImageTextToText
+from peft import PeftModel
+
+BASE_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+ADAPTER_PATH = "rukiyeberna/qwen2.5-vl-3b-food-extract-lora"
+
+base_model = AutoModelForImageTextToText.from_pretrained(
+    BASE_MODEL,
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
+processor = AutoProcessor.from_pretrained(ADAPTER_PATH)
+model.eval()
+```
+## 📂 Repository Structure
+
+```text
+├── data/                                         # Processed LLaVA-style JSON datasets
+│   ├── train_llava.json
+│   └── val_llava.json
+├── eval/                                         # Benchmark CSV logs & generated plots
+│   └── finetune_figures/
+│       ├── training_loss_curve.png
+│       ├── training_loss_curve_smoothed.png
+│       └── learning_rate_schedule.png
+├── notebooks/                                    # Interactive pipelines
+│   ├── foodextract_qwen_finetune.ipynb          # Data formatting & LoRA fine-tuning
+│   ├── foodextract_qwen_evaluation.ipynb        # Inference, fuzzy F1, and ROUGE evaluation
+│   └── qwen_finetuning_visualizations.ipynb     # Loss curves & configuration summary plots
+├── outputs/                                      # Saved LoRA adapter weights & config
+│   └── qwen25vl_foodextract_lora_full/
+└── README.md
+```
 ---
+
 
 ## 🏗️ Architecture & Fine-Tuning Pipeline
 
@@ -289,95 +342,4 @@ Evaluation results show that exact string matching is overly punitive for Vision
 ```
 
 > **Analysis:** The model detects the main protein (*scallops*) correctly, but omits plated accents (*pea puree, garnish*), causing a low metric score despite valid core identification[cite: 1].
-## 🖼️ Qualitative Extraction Examples
 
-Comparison between **Ground Truth** annotations and **Fine-tuned Qwen2.5-VL** structured outputs:
-
-## 🚀 Quick Start & Inference
-
-### 1. Environment Setup
-
-```bash
-pip install -U transformers accelerate peft qwen-vl-utils pillow pandas rouge-score
-```
-
-### 2. Run Inference
-
-```python
-import torch
-from PIL import Image
-from transformers import AutoProcessor, AutoModelForImageTextToText
-from peft import PeftModel
-
-BASE_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
-ADAPTER_PATH = "outputs/qwen25vl_foodextract_lora_full"
-
-# Load base model & LoRA adapter
-base_model = AutoModelForImageTextToText.from_pretrained(
-    BASE_MODEL,
-    torch_dtype=torch.bfloat16,
-    device_map="auto"
-)
-model = PeftModel.from_pretrained(base_model, ADAPTER_PATH)
-processor = AutoProcessor.from_pretrained(ADAPTER_PATH)
-model.eval()
-
-# Input image and prompt
-image = Image.open("sample_food.jpg").convert("RGB")
-prompt = """Analyze this image and return only valid JSON with exactly these keys:
-- is_food
-- image_title
-- food_items
-- drink_items"""
-
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "image": image},
-            {"type": "text", "text": prompt},
-        ],
-    }
-]
-
-text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-inputs = processor(text=[text], images=[image], padding=True, return_tensors="pt").to(model.device)
-
-with torch.inference_mode():
-    generated_ids = model.generate(
-        **inputs,
-        max_new_tokens=128,
-        do_sample=False,
-        repetition_penalty=1.15,
-        no_repeat_ngram_size=3
-    )
-
-output = processor.batch_decode(
-    generated_ids[:, inputs.input_ids.shape[1]:], 
-    skip_special_tokens=True
-)[0]
-
-print(output)
-```
-
----
-
-## 📂 Repository Structure
-
-```text
-├── data/                                         # Processed LLaVA-style JSON datasets
-│   ├── train_llava.json
-│   └── val_llava.json
-├── eval/                                         # Benchmark CSV logs & generated plots
-│   └── finetune_figures/
-│       ├── training_loss_curve.png
-│       ├── training_loss_curve_smoothed.png
-│       └── learning_rate_schedule.png
-├── notebooks/                                    # Interactive pipelines
-│   ├── foodextract_qwen_finetune.ipynb          # Data formatting & LoRA fine-tuning
-│   ├── foodextract_qwen_evaluation.ipynb        # Inference, fuzzy F1, and ROUGE evaluation
-│   └── qwen_finetuning_visualizations.ipynb     # Loss curves & configuration summary plots
-├── outputs/                                      # Saved LoRA adapter weights & config
-│   └── qwen25vl_foodextract_lora_full/
-└── README.md
-```
